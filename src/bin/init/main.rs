@@ -5,10 +5,9 @@ use std::env;
 use std::fs::{self, File};
 use std::io::{self, BufReader, Write};
 use std::os::unix::io::{AsRawFd, FromRawFd};
-use std::os::unix::process::ExitStatusExt;
 use std::sync::Arc;
 use std::time::Duration;
-use std::{collections::HashMap, convert::TryFrom};
+use std::collections::HashMap;
 
 use anyhow::Error;
 use futures::{StreamExt, TryStreamExt};
@@ -427,7 +426,7 @@ async fn main() -> Result<(), InitError> {
     )?;
 
     // set the maximum file limit this process can open
-    rlimit::setrlimit(rlimit::Resource::NOFILE, rlimit::Rlim::from_raw(10240), rlimit::Rlim::from_raw(10240)).ok();
+    rlimit::setrlimit(rlimit::Resource::NOFILE, 10240, 10240).ok();
 
     let image_conf = conf
         .image_config
