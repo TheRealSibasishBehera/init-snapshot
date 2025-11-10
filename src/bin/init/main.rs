@@ -426,7 +426,8 @@ async fn main() -> Result<(), InitError> {
         Some("cpuset"),
     )?;
 
-    rlimit::setrlimit(rlimit::Resource::NOFILE, 10240, 10240).ok();
+    // set the maximum file limit this process can open
+    rlimit::setrlimit(rlimit::Resource::NOFILE, rlimit::Rlim::from_raw(10240), rlimit::Rlim::from_raw(10240)).ok();
 
     let image_conf = conf
         .image_config
@@ -670,17 +671,20 @@ async fn main() -> Result<(), InitError> {
             addr_req.message_mut().header.flags |= IFA_F_NODAD;
             addr_req.execute().await?;
 
-            if let IpNetwork::V4(ipn) = ipc.ip {
-                if ipc.mask < 30 {
-                    let ipint: u32 = ipn.ip().into();
-                    let nextip: std::net::Ipv4Addr = (ipint + 1).into();
-
-                    address
-                        .add(eth0.header.index, std::net::IpAddr::V4(nextip), ipc.mask)
-                        .execute()
-                        .await?;
-                }
-            }
+            // BUGFIX: Removed secondary IP assignment that was causing ARP conflicts
+            // This was adding IP+1 as a secondary address, causing VMs to respond to
+            // ARP requests for IPs they don't own
+            // if let IpNetwork::V4(ipn) = ipc.ip {
+            //     if ipc.mask < 30 {
+            //         let ipint: u32 = ipn.ip().into();
+            //         let nextip: std::net::Ipv4Addr = (ipint + 1).into();
+            //
+            //         address
+            //             .add(eth0.header.index, std::net::IpAddr::V4(nextip), ipc.mask)
+            //             .execute()
+            //             .await?;
+            //     }
+            // }
 
             debug!("netlink: adding default route via {}", ipc.gateway);
             match ipc.gateway {
@@ -939,12 +943,12 @@ fn reap_zombies(pid: i32, exit_status: &mut i32) -> bool {
                     }
                 }
             }
-            Err(e) => match e {
-                nix::Error::Sys(Errno::ECHILD) => {
+            Err(e) => match e.as_errno() {
+                Some(Errno::ECHILD) => {
                     debug!("no child to wait");
                     break;
                 }
-                nix::Error::Sys(Errno::EINTR) => {
+                Some(Errno::EINTR) => {
                     debug!("got EINTR waiting for pids, continuing...");
                     continue;
                 }
